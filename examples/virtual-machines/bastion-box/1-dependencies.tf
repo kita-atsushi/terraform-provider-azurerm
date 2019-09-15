@@ -1,19 +1,35 @@
-resource "azurerm_resource_group" "example" {
-  name     = "${var.prefix}-resources"
+resource "azurerm_resource_group" "sandbox" {
+  name     = "${var.prefix}-sandbox-rsg"
   location = "${var.location}"
 }
 
-resource "azurerm_virtual_network" "example" {
-  name                = "${var.prefix}-network"
-  location            = "${azurerm_resource_group.example.location}"
-  resource_group_name = "${azurerm_resource_group.example.name}"
+resource "azurerm_virtual_network" "sandbox" {
+  name                = "sandbox-network"
+  location            = "${azurerm_resource_group.sandbox.location}"
+  resource_group_name = "${azurerm_resource_group.sandbox.name}"
   address_space       = ["10.0.0.0/16"]
 }
 
-resource "azurerm_network_security_group" "bastion" {
-  name                = "${azurerm_resource_group.example.name}-mgmt-nsg"
-  location            = "${azurerm_resource_group.example.location}"
-  resource_group_name = "${azurerm_resource_group.example.name}"
+resource "azurerm_subnet" "dmz" {
+  name                      = "${azurerm_resource_group.sandbox.name}-dmz"
+  virtual_network_name      = "${azurerm_virtual_network.sandbox.name}"
+  resource_group_name       = "${azurerm_resource_group.sandbox.name}"
+  address_prefix            = "10.0.1.0/24"
+  network_security_group_id = "${azurerm_network_security_group.dmz.id}"
+}
+
+resource "azurerm_subnet" "secure" {
+  name                      = "${azurerm_resource_group.sandbox.name}-secure"
+  virtual_network_name      = "${azurerm_virtual_network.sandbox.name}"
+  resource_group_name       = "${azurerm_resource_group.sandbox.name}"
+  address_prefix            = "10.0.10.0/24"
+  network_security_group_id = "${azurerm_network_security_group.secure.id}"
+}
+
+resource "azurerm_network_security_group" "dmz" {
+  name                = "sandbox-dmz-nsg"
+  location            = "${azurerm_resource_group.sandbox.location}"
+  resource_group_name = "${azurerm_resource_group.sandbox.name}"
 
   security_rule {
     name                       = "allow-ssh"
@@ -29,50 +45,21 @@ resource "azurerm_network_security_group" "bastion" {
   }
 }
 
-resource "azurerm_subnet" "bastion" {
-  name                      = "${azurerm_resource_group.example.name}-bastion"
-  virtual_network_name      = "${azurerm_virtual_network.example.name}"
-  resource_group_name       = "${azurerm_resource_group.example.name}"
-  address_prefix            = "10.0.0.128/25"
-  network_security_group_id = "${azurerm_network_security_group.bastion.id}"
-}
-
-resource "azurerm_network_security_group" "web" {
-  name                = "${azurerm_resource_group.example.name}-web"
-  location            = "${azurerm_resource_group.example.location}"
-  resource_group_name = "${azurerm_resource_group.example.name}"
+resource "azurerm_network_security_group" "secure" {
+  name                = "sandbox-secure-nsg"
+  location            = "${azurerm_resource_group.sandbox.location}"
+  resource_group_name = "${azurerm_resource_group.sandbox.name}"
 
   security_rule {
-    name                       = "allow-www"
-    description                = "Allow HTTP Traffic"
+    name                       = "allow-from-dmz-ssh"
+    description                = "Allow From DMZ SSH"
     priority                   = 100
     direction                  = "Inbound"
     access                     = "Allow"
     protocol                   = "Tcp"
     source_port_range          = "*"
-    destination_port_range     = "80"
-    source_address_prefix      = "Internet"
-    destination_address_prefix = "*"
-  }
-
-  security_rule {
-    name                       = "allow-internal-ssh"
-    description                = "Allow Internal SSH"
-    priority                   = 101
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
     destination_port_range     = "22"
-    source_address_prefix      = "VirtualNetwork"
+    source_address_prefix      = "${azurerm_subnet.dmz.address_prefix}"
     destination_address_prefix = "*"
   }
-}
-
-resource "azurerm_subnet" "web" {
-  name                      = "${azurerm_resource_group.example.name}-web"
-  virtual_network_name      = "${azurerm_virtual_network.example.name}"
-  resource_group_name       = "${azurerm_resource_group.example.name}"
-  address_prefix            = "10.0.1.0/24"
-  network_security_group_id = "${azurerm_network_security_group.web.id}"
 }
